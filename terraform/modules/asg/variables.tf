@@ -1,0 +1,39 @@
+variable "instance_type" {
+  type = string
+}
+
+variable "desired_capacity" {
+  type = number
+}
+
+variable "max_size" {
+  type = number
+}
+
+variable "min_size" {
+  type = number
+}
+
+variable "subnet_ids" {
+  type = list(string)
+}
+
+variable "security_group_id" {
+  type = string
+}
+
+variable "key_name" {
+  type = string
+}
+
+variable "asg_name" {
+  type = string
+}
+
+variable "target_group_arns" {
+  type = list(string)
+}
+
+variable "ami_id" {
+  type = string
+}

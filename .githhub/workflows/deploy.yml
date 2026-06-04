@@ -1,0 +1,107 @@
+name: "Deploy & Bake AMI"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "web/**"
+      - "ansible/roles/nginx/**"
+      - "ansible/roles/fastapi/**"
+  workflow_dispatch: # 원할때 실행할 수 있는 버튼을 github actions에 만들어 지도록 한다.
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ap-northeast-2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SSH 키 설정
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.BASTION_PRIVATE_KEY }}" > ~/.ssh/bastion-key.pem
+          chmod 600 ~/.ssh/bastion-key.pem
+          echo "${{ secrets.ANSIBLE_PRIVATE_KEY }}" > ~/.ssh/ansible-key.pem
+          chmod 600 ~/.ssh/ansible-key.pem
+              
+      - name: WAS SSH 연결 테스트 (디버깅용)
+        run: |
+          BASTION_IP=$(python3 -c "
+          import yaml
+          inv = yaml.safe_load(open('ansible/inventories/dev/inventory.yml'))
+          print(inv['all']['children']['bastion']['hosts']['bastion01']['ansible_host'])
+          ")
+          WAS_IP=$(python3 -c "
+          import yaml
+          inv = yaml.safe_load(open('ansible/inventories/dev/inventory.yml'))
+          print(inv['all']['children']['was']['hosts']['was01']['ansible_host'])
+          ")
+          echo "Bastion IP: $BASTION_IP / WAS IP: $WAS_IP"
+          ssh -i ~/.ssh/ansible-key.pem \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=10 \
+            -o ProxyCommand="ssh -i ~/.ssh/bastion-key.pem -W %h:%p -q -o StrictHostKeyChecking=no adreamin@$BASTION_IP" \
+            -v \
+            adreamin@$WAS_IP "echo 'WAS OK'"
+            
+      - name: Python & Ansible 설치
+        run: pip install ansible boto3 botocore
+
+      - name: Ansible Galaxy 컬렉션 설치
+        working-directory: ./ansible
+        run: ansible-galaxy collection install amazon.aws
+
+      - name: WAS 최신 코드 배포
+        working-directory: ./ansible
+        run: |
+          ansible-playbook \
+            -i inventories/dev/inventory.yml \
+            playbooks/deploy_fastapi.yml \
+            -e "ansible_python_interpreter=/usr/bin/python3"
+
+      - name: WAS AMI 캡처
+        working-directory: ./ansible
+        run: |
+          ansible-playbook \
+            -i inventories/dev/inventory.yml \
+            playbooks/ami_capture.yml \
+            -e "ansible_python_interpreter=/usr/bin/python3"
+
+      # -------------------------
+      # AMI ID 추출 (핵심)
+      # -------------------------
+      - name: AMI ID 가져오기
+        run: |
+          AMI_ID=$(aws ec2 describe-images \
+            --owners self \
+            --filters "Name=name,Values=project01-was-ami-*" \
+            --query 'Images | sort_by(@,&CreationDate)[-1].ImageId' \
+            --output text)
+
+          echo "AMI_ID=$AMI_ID" >> $GITHUB_ENV
+          echo "Latest AMI: $AMI_ID"
+
+      - name: Terraform 설치
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        working-directory: ./terraform/envs/dev
+        run: terraform init
+
+      - name: ASG 업데이트 (새 AMI 반영)
+        working-directory: ./terraform/envs/dev
+        #run: terraform apply --auto-approve -target=module.asg
+        run: |
+          terraform apply --auto-approve \
+            -target=module.asg \
+            -var="ami_id=${{ env.AMI_ID }}"
+
+      - name: ASG Instance Refresh Trigger
+        run: |
+          aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name project01-asg

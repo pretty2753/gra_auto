@@ -1,0 +1,149 @@
+services:
+
+  # -------------------------------------------------
+  # Prometheus
+  # 메트릭을 수집하는 모니터링 서버
+  # -------------------------------------------------
+  prometheus:
+
+    # Prometheus 공식 이미지 사용
+    image: prom/prometheus
+
+    # 컨테이너 이름
+    container_name: prometheus
+
+    # 호스트포트:컨테이너포트
+    ports:
+      - "9090:9090"
+
+    volumes:
+
+      # Bind Mount
+      # VM의 설정 파일을 컨테이너 내부 설정파일로 연결
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+    # 컨테이너 재시작 정책
+    restart: unless-stopped
+
+    # 모니터링 네트워크 참여
+    networks:
+      - project2-network
+
+  # -------------------------------------------------
+  # AlertManager
+  # Prometheus Alert 처리
+  # -------------------------------------------------
+  alertmanager:
+
+    image: prom/alertmanager
+
+    container_name: alertmanager
+
+    ports:
+      - "9093:9093"
+
+    volumes:
+
+      # Bind Mount
+      # AlertManager 설정 파일 연결
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+
+    restart: unless-stopped
+
+    networks:
+      - project2-network
+
+  # -------------------------------------------------
+  # Grafana
+  # 모니터링 대시보드
+  # -------------------------------------------------
+  grafana:
+
+    image: grafana/grafana
+
+    container_name: grafana
+
+    ports:
+      - "3000:3000"
+
+    volumes:
+
+      # Docker Volume
+      # Grafana 내부 데이터 저장
+      #
+      # 저장되는 데이터 예시
+      # - 사용자 계정
+      # - 비밀번호
+      # - 대시보드
+      # - 데이터소스
+      # - 알람 설정
+      #
+      # 컨테이너 삭제 후 재생성해도 유지됨
+      - grafana-storage:/var/lib/grafana
+
+      # Bind Mount
+      # Grafana Provisioning 자동 설정
+      #
+      # 예시
+      # - datasource 자동 등록
+      # - dashboard 자동 등록
+      - ./grafana/provisioning:/etc/grafana/provisioning
+
+    restart: unless-stopped
+
+    networks:
+      - project2-network
+
+  # -------------------------------------------------
+  # Management Runner
+  # Terraform / Ansible 실행 환경
+  # -------------------------------------------------
+  mgmt-runner:
+
+    build:
+      context: ./management/runner
+
+    container_name: mgmt-runner
+
+    tty: true
+    stdin_open: true
+
+    volumes:
+
+      # Terraform 코드
+      - ./terraform:/workspace/terraform
+
+      # Ansible 코드
+      - ./ansible:/workspace/ansible
+
+      # 배포 대상 코드
+      - ./web:/workspace/web
+
+    restart: unless-stopped
+
+    networks:
+      - project2-network
+
+# -------------------------------------------------
+# Docker Named Volume
+# -------------------------------------------------
+volumes:
+
+  # Grafana 영구 저장소
+  grafana-storage:
+    driver: local
+
+# -------------------------------------------------
+# Docker Network
+# -------------------------------------------------
+networks:
+
+  # Prometheus
+  # Grafana
+  # AlertManager
+  # FastAPI
+  # mgmt-runner
+  #
+  # 컨테이너 간 통신용 네트워크
+  project2-network:
+    driver: bridge
