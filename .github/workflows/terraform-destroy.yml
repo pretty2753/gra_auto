@@ -23,3 +23,7 @@ jobs:
 
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
+
+      - name: Cleanup Terraform Cache
+        if: always()
+        run: rm -rf .terraform .terraform.lock.hcl tfplan
