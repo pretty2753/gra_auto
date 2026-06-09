@@ -1,11 +1,18 @@
-output "bastion_public_ip" {
-  value = module.project01_bastion_ec2.public_ip
+output "vpc_id" {
+  value = module.project02_vpc.vpc_id
 }
 
-output "was_private_ip" {
-  value = module.project01_was01_ec2.private_ip
+# Bastion이 삭제되었으므로, NAT 인스턴스의 퍼블릭 IP를 출력합니다.
+output "nat_instance_public_ip" {
+  description = "The public IP of the NAT instance"
+  value       = module.project02_nat_instance.public_ip
 }
 
-output "db_private_ip" {
-  value = module.project01_db_ec2.private_ip
+output "alb_dns_name" {
+  value = module.project02_alb.alb_dns_name
+}
+
+output "was_ecr_repository_url" {
+  description = "The URL of the ECR repository for the WAS application"
+  value       = aws_ecr_repository.was_repo.repository_url
 }

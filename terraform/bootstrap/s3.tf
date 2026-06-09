@@ -1,11 +1,11 @@
 resource "aws_s3_bucket" "tfstate" {
-  bucket = "project01-tfstate-bucket"
+  bucket = "project02-tfstate-bucket"
 
   # 실수 방지 (삭제 방지)
   force_destroy = false
 
   tags = {
-    Name = "project01-tfstate"
+    Name = "project02-tfstate"
   }
 }
 

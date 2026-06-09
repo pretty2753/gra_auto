@@ -14,3 +14,9 @@
 보안 그룹 문제
 EC2 문제
 ALB 문제
+
+## s3
+Bucket name : project02-tfstate-bucket
+
+## dynamodb
+Table name : project02-terraform-lock
