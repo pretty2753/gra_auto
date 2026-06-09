@@ -53,4 +53,25 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" \
 # -------------------------------------------------
 WORKDIR /workspace
 
+# -------------------------------------------------
+# GitHub Actions Runner 설치 및 계정 설정
+# -------------------------------------------------
+# 1) 러너 실행용 non-root 계정 생성 (패스워드 없음)
+RUN useradd -m runner && \
+    usermod -aG wheel runner && \
+    echo "runner ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# 2) 러너 다운로드 및 압축 해제
+RUN mkdir -p /home/runner/actions-runner && cd /home/runner/actions-runner && \
+    curl -o actions-runner-linux-x64-2.321.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.321.0/actions-runner-linux-x64-2.321.0.tar.gz && \
+    tar xzf ./actions-runner-linux-x64-2.321.0.tar.gz && \
+    chown -R runner:runner /home/runner/actions-runner
+
+# 3) 의존성 설치 스크립트 실행
+RUN /home/runner/actions-runner/bin/installdependencies.sh
+
+# 4) 워크스페이스 권한 부여
+RUN chown -R runner:runner /workspace
+
+# 별도 CMD 없이 /bin/bash 로 유지. (사용자가 컨테이너 안에서 ./config.sh 수동 실행 후 ./run.sh 가동)
 CMD ["/bin/bash"]
