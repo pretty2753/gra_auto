@@ -1,0 +1,100 @@
+############################################
+# 7. Ansible Inventory 자동 생성
+############################################
+# → 테라폼으로 만들어진 EC2 인스턴스들의 IP 주소를 
+#    Ansible이 읽을 수 있는 inventory.yml 파일로 자동 저장합니다.
+
+# [1] Bootstrap 전용 Inventory 생성
+resource "local_file" "ansible_inventory_bootstrap" {
+  filename = "${path.root}/../../../ansible/inventories/bootstrap/inventory.yml"
+
+  content = yamlencode({
+    all = {
+      vars = {
+        ansible_user                 = "ec2-user"
+        ansible_ssh_private_key_file = "~/.ssh/project02-was-key.pem" # 임시로 was 키 사용
+        ansible_host_key_checking    = false
+      }
+
+      children = {
+        was = {
+          hosts = {
+            was01 = {
+              # Tailscale이 연결된 상태라면 프라이빗 IP로 직접 접근 가능
+              ansible_host                    = module.project02_was01_ec2.private_ip
+              ansible_ssh_private_key_file    = "~/.ssh/${module.project02_was_ec2_key.key_name}.pem"
+              ansible_ssh_common_args = <<-EOT
+                -o StrictHostKeyChecking=no
+                -o UserKnownHostsFile=/dev/null
+              EOT			  
+            }
+          }
+        }
+
+        db = {
+          hosts = {
+            db01 = {
+              ansible_host                    = module.project02_db_ec2.private_ip
+              ansible_ssh_private_key_file    = "~/.ssh/${module.project02_db_ec2_key.key_name}.pem"
+              ansible_ssh_common_args = <<-EOT
+                -o StrictHostKeyChecking=no
+                -o UserKnownHostsFile=/dev/null
+              EOT				
+            }
+          }
+        }
+      }
+    }
+  })
+
+  depends_on = [
+    module.project02_was01_ec2,
+    module.project02_db_ec2,
+  ]
+}
+
+# [2] Dev/Prod 전용 Inventory 생성
+resource "local_file" "ansible_inventory_prod" {
+  filename = "${path.root}/../../../ansible/inventories/dev/inventory.yml"
+
+  content = yamlencode({
+    all = {
+      vars = {
+        ansible_user                 = "adreamin"
+        ansible_ssh_private_key_file = "~/.ssh/ansible-key.pem"
+        ansible_host_key_checking    = false
+      }
+
+      children = {
+        was = {
+          hosts = {
+            was01 = {
+              ansible_host            = module.project02_was01_ec2.private_ip
+              ansible_ssh_common_args = <<-EOT
+                -o StrictHostKeyChecking=no
+                -o UserKnownHostsFile=/dev/null
+              EOT				
+            }		
+          }
+        }
+
+        db = {
+          hosts = {
+            db01 = {
+              ansible_host            = module.project02_db_ec2.private_ip
+              ansible_ssh_common_args = <<-EOT
+                -o StrictHostKeyChecking=no
+                -o UserKnownHostsFile=/dev/null
+              EOT				
+            }
+          }
+        }
+      }
+    }
+  })
+
+  depends_on = [
+    module.project02_was01_ec2,
+    module.project02_db_ec2,
+  ]
+}
