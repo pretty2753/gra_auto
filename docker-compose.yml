@@ -22,6 +22,11 @@ services:
       # VM의 설정 파일을 컨테이너 내부 설정파일로 연결
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
 
+    environment:
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_DEFAULT_REGION
+
     # 컨테이너 재시작 정책
     restart: unless-stopped
 
@@ -118,6 +123,11 @@ services:
 
       # 배포 대상 코드
       - ./web:/workspace/web
+
+    environment:
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_DEFAULT_REGION
 
     restart: unless-stopped
 

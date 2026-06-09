@@ -20,11 +20,20 @@ scrape_configs:
       - targets:
           - prometheus:9090
 
-  # 현재는 테스트 코드 (컨테이너들이 잘 연동되는지만 테스트하기 위함)
-  # 추후에 EC2상의 인스턴스들 ip를 연결해야함
-  
-  # Terraform
-  # ↓
-  # EC2 생성
-  # ↓
-  # Prometheus 자동 등록
+  - job_name: 'aws-was-nodes'
+    ec2_sd_configs:
+      - region: ap-northeast-2
+        port: 9100
+    relabel_configs:
+      # 인스턴스 상태가 running 인 것만 수집
+      - source_labels: [__meta_ec2_instance_state]
+        regex: running
+        action: keep
+      # 태그 Role = WAS 인 인스턴스만 수집
+      - source_labels: [__meta_ec2_tag_Role]
+        regex: WAS
+        action: keep
+      # 수집 타겟 IP를 프라이빗 IP로 변경
+      - source_labels: [__meta_ec2_private_ip]
+        target_label: __address__
+        replacement: "${1}:9100"
