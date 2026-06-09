@@ -37,3 +37,9 @@ variable "target_group_arns" {
 variable "ami_id" {
   type = string
 }
+
+variable "user_data" {
+  description = "The user data script to run on instances"
+  type        = string
+  default     = ""
+}

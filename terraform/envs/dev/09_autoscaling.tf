@@ -1,31 +1,103 @@
 ############################################
-# Auto Scaling (ASG)
+# Auto Scaling Group (ASG)
 ############################################
 
-#2차 실행시 적용 (주석해제)
+# [1] WAS 서버 오토 스케일링
+# → 트래픽이 몰릴 때 자동으로 서버를 복제해서 늘려주고(Scale-Out), 
+#    트래픽이 줄어들면 다시 서버를 줄여주는(Scale-In) 핵심 리소스입니다.
+# (2차 실행 시 주석 해제하여 사용)
 
 module "asg" {
   source = "../../modules/asg"
 
   ami_id = var.ami_id
 
-  asg_name = "project01-asg"
+  asg_name = "project02-asg"
 
   instance_type = "t3.micro"
 
+  # 최소 2대를 유지하고, 최대 4대까지 자동으로 늘어납니다.
   desired_capacity = 2
   min_size         = 2
   max_size         = 4
 
+  # 인스턴스가 생성될 프라이빗 서브넷 위치 (AZ-a 단일 구성)
   subnet_ids = [
-    module.project01_private_subnet_was.subnet_id
+    module.project02_private_subnet_was.subnet_id
   ]
 
-  security_group_id = module.project01_was_sg.sg_id
+  # 생성된 인스턴스에 적용될 방화벽(보안 그룹)
+  security_group_id = module.project02_was_sg.sg_id
 
-  key_name = module.project01_was_ec2_key.key_name
+  # 접속 키페어
+  key_name = module.project02_was_ec2_key.key_name
 
+  # 로드밸런서(ALB)의 타겟 그룹과 연동되어 새로 생성된 서버가 자동으로 로드밸런서에 등록됩니다.
   target_group_arns = [
-    module.project01_alb.target_group_arn
+    module.project02_alb.target_group_arn
   ]
+
+  user_data = <<-EOF
+              #!/bin/bash
+              dnf update -y
+              dnf install docker -y
+              systemctl enable --now docker
+              usermod -aG docker ec2-user
+              
+              dnf install docker-compose-plugin -y
+              
+              mkdir -p /home/ec2-user/app
+              cd /home/ec2-user/app
+              
+              cat <<'NGINX' > nginx.conf
+              user nginx;
+              worker_processes auto;
+              events { worker_connections 1024; }
+              http {
+                  server {
+                      listen 80;
+                      location / {
+                          root /usr/share/nginx/html;
+                          index index.html;
+                      }
+                      location /health {
+                          access_log off;
+                          return 200 'OK';
+                      }
+                  }
+              }
+              NGINX
+              
+              cat <<'COMPOSE' > docker-compose.yml
+              version: '3.8'
+              services:
+                nginx:
+                  image: nginx:latest
+                  container_name: nginx
+                  ports:
+                    - "80:80"
+                  volumes:
+                    - ./nginx.conf:/etc/nginx/nginx.conf:ro
+                  restart: always
+              
+                node-exporter:
+                  image: prom/node-exporter:latest
+                  container_name: node-exporter
+                  ports:
+                    - "9100:9100"
+                  volumes:
+                    - /proc:/host/proc:ro
+                    - /sys:/host/sys:ro
+                    - /:/rootfs:ro
+                  command:
+                    - '--path.procfs=/host/proc'
+                    - '--path.rootfs=/rootfs'
+                    - '--path.sysfs=/host/sys'
+                    - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+                  restart: always
+              COMPOSE
+              
+              chown -R ec2-user:ec2-user /home/ec2-user/app
+              docker compose up -d
+              EOF
 }

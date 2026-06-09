@@ -2,10 +2,11 @@
 
 data "aws_ami" "was_ami" {
   most_recent = true
-  owners      = ["self"] # 이미지는 내 계정에 있음
+  owners      = ["amazon"]
+
   filter {
     name   = "name"
-    values = ["project01-was-ami-*"] # 이미지 이름
+    values = ["al2023-ami-2023.*-x86_64"]
   }
 }
 
@@ -15,7 +16,7 @@ locals {
 
 # Launch Template
 resource "aws_launch_template" "lt" {
-  name_prefix   = "project01-was01-ec2-"
+  name_prefix   = "project02-was01-ec2-"
 
   #image_id      = data.aws_ami.was_ami.id
   image_id      = local.ami_id   #jin 추가
@@ -26,7 +27,7 @@ resource "aws_launch_template" "lt" {
   key_name               = var.key_name
   
   
-  user_data = base64encode("AMI=${local.ami_id}") #jin 추가
+  user_data = base64encode(var.user_data)
 
   # 시작 템플릿을 통해 생성될 리소스에 대한 상태 태그 설정
   tag_specifications {
@@ -34,7 +35,7 @@ resource "aws_launch_template" "lt" {
     resource_type = "instance"
     # asg가 인스턴스를 생성할때 마다 이 이름을 붙여준다
     tags = {
-       Name = "project01-was-ec2"
+       Name = "project02-was-ec2"
        Role = "WAS" 
     }
   }
