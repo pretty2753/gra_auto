@@ -19,7 +19,6 @@ permissions:
   contents: read
   pull-requests: write
 
-# 다른 terraform 워크플로우와 충돌 방지
 concurrency:
   group: terraform-state
   cancel-in-progress: false
@@ -36,6 +35,8 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
       - name: Terraform init
         working-directory: terraform/envs/dev
@@ -105,11 +106,13 @@ jobs:
 
       - name: Send Telegram Notification
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message_file: telegram-message.md
+        run: |
+          MESSAGE=$(cat telegram-message.md)
+          
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=$MESSAGE"
 
       - name: Post Plan & Cost to PR comment
         if: github.event_name == 'pull_request'
@@ -143,6 +146,8 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
       - name: Terraform init
         working-directory: terraform/envs/dev
@@ -154,21 +159,25 @@ jobs:
 
       - name: Send Apply Success Notification
         if: success()
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message: |
-            수동 인프라 배포(Terraform Apply) 작업이 정상적으로 완료되었습니다.
-            실행자: ${{ github.actor }}
+        run: |
+          MESSAGE="✅ 수동 인프라 배포(Terraform Apply) 작업이 정상적으로 완료되었습니다.
+          실행자: ${{ github.actor }}
+          로그: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=$MESSAGE"
 
       - name: Send Apply Failure Notification
         if: failure()
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message: |
-            수동 인프라 배포(Terraform Apply) 실패
-            실행자: ${{ github.actor }}
-            GitHub Actions 로그를 확인하십시오.
+        run: |
+          MESSAGE="❌ 수동 인프라 배포(Terraform Apply) 실패
+          실행자: ${{ github.actor }}
+          GitHub Actions 로그를 확인하십시오.
+          로그: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=$MESSAGE"
