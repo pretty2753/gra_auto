@@ -9,20 +9,18 @@ jobs:
   terraform-plan:
     runs-on: self-hosted
 
+    defaults:
+      run:
+        working-directory: ./terraform/envs/dev
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Terraform Init
-        run: |
-          cd terraform
-          terraform init
+        run: terraform init
 
       - name: Terraform Validate
-        run: |
-          cd terraform
-          terraform validate
+        run: terraform validate
 
       - name: Terraform Plan
-        run: |
-          cd terraform
-          terraform plan
+        run: terraform plan
