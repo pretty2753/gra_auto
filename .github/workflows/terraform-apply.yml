@@ -1,22 +1,37 @@
-name: Terraform Apply
+name: "Terraform Infrastructure Apply"
 
 on:
   push:
     branches:
       - main
+    paths:
+      - "terraform/**"
+  workflow_dispatch:
 
 jobs:
   terraform-apply:
-    runs-on: self-hosted
+    runs-on: self-hosted # mgmt-runner 내부에서 실행
+
+    env:
+      TF_VAR_tailscale_auth_key: ${{ secrets.TAILSCALE_AUTH_KEY }}
 
     defaults:
       run:
         working-directory: ./terraform/envs/dev
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Terraform Init
+        run: terraform init -upgrade
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
 
       - name: Terraform Apply
-        run: |
-          terraform init
-          terraform apply -auto-approve
+        run: terraform apply -auto-approve tfplan
+
+      - name: Cleanup Terraform Cache
+        if: always()
+        run: rm -rf .terraform .terraform.lock.hcl tfplan
