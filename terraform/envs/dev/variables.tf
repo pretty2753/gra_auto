@@ -8,3 +8,15 @@ variable "tailscale_auth_key" {
   type        = string
   sensitive   = true
 }
+
+variable "db_user" {
+  description = "PostgreSQL 사용자명"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_password" {
+  description = "PostgreSQL 비밀번호"
+  type        = string
+  sensitive   = true
+}

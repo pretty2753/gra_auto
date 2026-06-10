@@ -39,8 +39,8 @@ module "project02_db_ec2" {
     docker run -d \
       --name postgres \
       --restart always \
-      -e POSTGRES_USER=eventuser \
-      -e POSTGRES_PASSWORD=1234 \
+      -e POSTGRES_USER=${var.db_user} \
+      -e POSTGRES_PASSWORD=${var.db_password} \
       -e POSTGRES_DB=eventdb \
       -p 5432:5432 \
       [DOCKERHUB_USERNAME]/project02-db:latest

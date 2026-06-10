@@ -71,7 +71,7 @@ module "asg" {
       app:
         image: [APP_IMAGE]
         environment:
-          - DB_URL=[DB_URL]
+          - DATABASE_URL=postgresql://${var.db_user}:${var.db_password}@${module.project02_db_ec2.private_ip}:5432/eventdb
         restart: always
 
       nginx:
