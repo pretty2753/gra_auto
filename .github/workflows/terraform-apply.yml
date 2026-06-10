@@ -9,11 +9,14 @@ jobs:
   terraform-apply:
     runs-on: self-hosted
 
+    defaults:
+      run:
+        working-directory: ./terraform/envs/dev
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Terraform Apply
         run: |
-          cd terraform
           terraform init
           terraform apply -auto-approve

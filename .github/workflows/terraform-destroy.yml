@@ -1,0 +1,29 @@
+name: "Terraform Infrastructure Destroy"
+
+on:
+  workflow_dispatch: # 오직 수동으로만 실행 가능
+
+jobs:
+  destroy:
+    runs-on: self-hosted # mgmt-runner 내부에서 실행
+
+    env:
+      TF_VAR_tailscale_auth_key: ${{ secrets.TAILSCALE_AUTH_KEY }}
+
+    defaults:
+      run:
+        working-directory: ./terraform/envs/dev
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Terraform Init
+        run: terraform init -upgrade
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve
+
+      - name: Cleanup Terraform Cache
+        if: always()
+        run: rm -rf .terraform .terraform.lock.hcl tfplan
