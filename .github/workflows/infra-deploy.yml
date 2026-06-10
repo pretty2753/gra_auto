@@ -105,11 +105,14 @@ jobs:
 
       - name: Send Telegram Notification
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message_file: telegram-message.md
+        env:
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          MSG=$(cat telegram-message.md)
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="$MSG"
 
       - name: Post Plan & Cost to PR comment
         if: github.event_name == 'pull_request'
@@ -154,21 +157,25 @@ jobs:
 
       - name: Send Apply Success Notification
         if: success()
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message: |
-            수동 인프라 배포(Terraform Apply) 작업이 정상적으로 완료되었습니다.
-            실행자: ${{ github.actor }}
+        env:
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          MSG="수동 인프라 배포(Terraform Apply) 작업이 정상적으로 완료되었습니다.
+          실행자: ${{ github.actor }}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="$MSG"
 
       - name: Send Apply Failure Notification
         if: failure()
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message: |
-            수동 인프라 배포(Terraform Apply) 실패
-            실행자: ${{ github.actor }}
-            GitHub Actions 로그를 확인하십시오.
+        env:
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          MSG="수동 인프라 배포(Terraform Apply) 실패
+          실행자: ${{ github.actor }}
+          GitHub Actions 로그를 확인하십시오."
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="$MSG"
