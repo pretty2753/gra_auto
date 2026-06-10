@@ -38,66 +38,73 @@ module "asg" {
   ]
 
   user_data = <<-EOF
-              #!/bin/bash
-              dnf update -y
-              dnf install docker -y
-              systemctl enable --now docker
-              usermod -aG docker ec2-user
-              
-              dnf install docker-compose-plugin -y
-              
-              mkdir -p /home/ec2-user/app
-              cd /home/ec2-user/app
-              
-              cat <<'NGINX' > nginx.conf
-              user nginx;
-              worker_processes auto;
-              events { worker_connections 1024; }
-              http {
-                  server {
-                      listen 80;
-                      location / {
-                          root /usr/share/nginx/html;
-                          index index.html;
-                      }
-                      location /health {
-                          access_log off;
-                          return 200 'OK';
-                      }
-                  }
-              }
-              NGINX
-              
-              cat <<'COMPOSE' > docker-compose.yml
-              version: '3.8'
-              services:
-                nginx:
-                  image: nginx:latest
-                  container_name: nginx
-                  ports:
-                    - "80:80"
-                  volumes:
-                    - ./nginx.conf:/etc/nginx/nginx.conf:ro
-                  restart: always
-              
-                node-exporter:
-                  image: prom/node-exporter:latest
-                  container_name: node-exporter
-                  ports:
-                    - "9100:9100"
-                  volumes:
-                    - /proc:/host/proc:ro
-                    - /sys:/host/sys:ro
-                    - /:/rootfs:ro
-                  command:
-                    - '--path.procfs=/host/proc'
-                    - '--path.rootfs=/rootfs'
-                    - '--path.sysfs=/host/sys'
-                    - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-                  restart: always
-              COMPOSE
-              
-              chown -R ec2-user:ec2-user /home/ec2-user/app
-              docker compose up -d
-              EOF
+    #!/bin/bash
+    # Docker는 packer AMI에 이미 설치되어 있음
+    systemctl start docker
+
+    mkdir -p /home/ec2-user/app
+    cd /home/ec2-user/app
+
+    cat <<'NGINX' > nginx.conf
+    user nginx;
+    worker_processes auto;
+    events { worker_connections 1024; }
+    http {
+        server {
+            listen 80;
+            location / {
+                proxy_pass         http://app:8000;
+                proxy_set_header   Host $host;
+                proxy_set_header   X-Real-IP $remote_addr;
+                proxy_read_timeout 10s;
+            }
+            location /health {
+                proxy_pass http://app:8000/health;
+                access_log off;
+            }
+        }
+    }
+    NGINX
+
+    cat <<'COMPOSE' > docker-compose.yml
+    services:
+      app:
+        image: [APP_IMAGE]
+        environment:
+          - DB_URL=[DB_URL]
+        restart: always
+
+      nginx:
+        image: nginx:latest
+        container_name: nginx
+        ports:
+          - "80:80"
+        volumes:
+          - ./nginx.conf:/etc/nginx/nginx.conf:ro
+        depends_on:
+          - app
+        restart: always
+
+      node-exporter:
+        image: prom/node-exporter:latest
+        container_name: node-exporter
+        ports:
+          - "9100:9100"
+        network_mode: host
+        pid: host
+        volumes:
+          - /proc:/host/proc:ro
+          - /sys:/host/sys:ro
+          - /:/rootfs:ro
+        command:
+          - '--path.procfs=/host/proc'
+          - '--path.rootfs=/rootfs'
+          - '--path.sysfs=/host/sys'
+          - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+        restart: always
+    COMPOSE
+
+    chown -R ec2-user:ec2-user /home/ec2-user/app
+    docker compose up -d
+  EOF
 }
