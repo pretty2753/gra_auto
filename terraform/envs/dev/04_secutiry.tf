@@ -16,8 +16,8 @@ module "project02_nat_sg" {
       from_port   = 0
       to_port     = 0
       protocol    = "-1"
-      cidr_blocks = ["10.0.0.0/16"]
-      description = "Allow all traffic from VPC internal for NAT routing"
+      cidr_blocks = ["10.0.0.0/16", "100.64.0.0/10"]
+      description = "Allow all traffic from VPC internal and Tailscale for NAT routing"
     }
   ]
   # 아웃바운드(나가는 트래픽) 규칙: 어디로든 자유롭게 나갈 수 있도록 허용합니다.
@@ -53,7 +53,7 @@ module "project02_was_sg" {
       from_port   = 22
       to_port     = 22
       protocol    = "tcp"
-      cidr_blocks = ["10.0.0.0/16"]
+      cidr_blocks = ["10.0.0.0/16", "100.64.0.0/10"]
       description = "Internal VPC SSH Access (Tailscale or mgmt)"
     },
     # 3. 메트릭 수집을 위한 내부망의 Prometheus Node Exporter(9100) 접근을 허용합니다.
@@ -61,8 +61,8 @@ module "project02_was_sg" {
       from_port   = 9100
       to_port     = 9100
       protocol    = "tcp"
-      cidr_blocks = ["10.0.0.0/16"]
-      description = "Prometheus Node Exporter access from internal VPC"
+      cidr_blocks = ["10.0.0.0/16", "100.64.0.0/10"]
+      description = "Prometheus Node Exporter access from internal VPC and Tailscale"
     }
   ]
   egress_rules = [
@@ -97,7 +97,7 @@ module "project02_db_sg" {
       from_port   = 22
       to_port     = 22
       protocol    = "tcp"
-      cidr_blocks = ["10.0.0.0/16"]
+      cidr_blocks = ["10.0.0.0/16", "100.64.0.0/10"]
       description = "Internal VPC SSH Access (Tailscale or mgmt)"
     },
     # 3. 성능 모니터링을 위한 내부망 접근 허용 (Node Exporter 9100, Postgres Exporter 9187)
@@ -105,15 +105,15 @@ module "project02_db_sg" {
       from_port   = 9100
       to_port     = 9100
       protocol    = "tcp"
-      cidr_blocks = ["10.0.0.0/16"]
-      description = "Prometheus Node Exporter access from internal VPC"
+      cidr_blocks = ["10.0.0.0/16", "100.64.0.0/10"]
+      description = "Prometheus Node Exporter access from internal VPC and Tailscale"
     },
     {
       from_port   = 9187
       to_port     = 9187
       protocol    = "tcp"
-      cidr_blocks = ["10.0.0.0/16"]
-      description = "Prometheus Postgres Exporter access from internal VPC"
+      cidr_blocks = ["10.0.0.0/16", "100.64.0.0/10"]
+      description = "Prometheus Postgres Exporter access from internal VPC and Tailscale"
     }
   ]
   egress_rules = [
