@@ -16,3 +16,8 @@ output "was_ecr_repository_url" {
   description = "The URL of the ECR repository for the WAS application"
   value       = aws_ecr_repository.was_repo.repository_url
 }
+
+output "db_private_ip" {
+  description = "The Private IP of the DB instance (Accessible via Tailscale)"
+  value       = module.project02_db_ec2.private_ip
+}
