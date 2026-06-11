@@ -88,9 +88,9 @@ jobs:
             HIGH=$(grep -c "HIGH:" ${{ github.workspace }}/trivy-report.txt 2>/dev/null || echo 0)
             MEDIUM=$(grep -c "MEDIUM:" ${{ github.workspace }}/trivy-report.txt 2>/dev/null || echo 0)
             
-            echo "- CRITICAL: \$CRITICAL" >> discord-message.md
-            echo "- HIGH: \$HIGH" >> discord-message.md
-            echo "- MEDIUM: \$MEDIUM" >> discord-message.md
+            echo "- CRITICAL: $CRITICAL" >> discord-message.md
+            echo "- HIGH: $HIGH" >> discord-message.md
+            echo "- MEDIUM: $MEDIUM" >> discord-message.md
             
             echo "" >> discord-message.md
             echo "상세 내용: [GitHub Actions 로그 확인](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> discord-message.md
@@ -101,8 +101,8 @@ jobs:
       - name: Send Discord Notification
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         run: |
-          MESSAGE=\$(cat discord-message.md)
-          jq -n --arg msg "\$MESSAGE" '{"content": \$msg}' > discord-payload.json
+          MESSAGE=$(cat discord-message.md)
+          jq -n --arg msg "$MESSAGE" '{"content": $msg}' > discord-payload.json
           
           curl -s -H "Content-Type: application/json" \
             -X POST \
