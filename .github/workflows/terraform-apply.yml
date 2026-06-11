@@ -32,6 +32,31 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
 
+      - name: Send Apply Success Notification
+        if: success()
+        run: |
+          MESSAGE="✅ 수동 인프라 배포(Terraform Apply) 작업이 정상적으로 완료되었습니다.
+          실행자: ${{ github.actor }}
+          로그: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=$MESSAGE"
+
+      - name: Send Apply Failure Notification
+        if: failure()
+        run: |
+          MESSAGE="❌ 수동 인프라 배포(Terraform Apply) 실패
+          실행자: ${{ github.actor }}
+          GitHub Actions 로그를 확인하십시오.
+          로그: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=$MESSAGE"
+
       - name: Cleanup Terraform Cache
         if: always()
         run: rm -rf .terraform .terraform.lock.hcl tfplan

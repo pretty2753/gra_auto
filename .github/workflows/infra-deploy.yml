@@ -1,16 +1,16 @@
 name: "infra"
 
 on:
-  pull_request: 
+  pull_request:
     branches: ["main", "master"]
     paths: ["terraform/**"]
-  push:         
+  push:
     branches: ["main", "master"]
     paths: ["terraform/**"]
-  workflow_dispatch: 
+  workflow_dispatch:
     inputs:
       execute_apply:
-        description: '승인: 보안 및 비용 리포트를 검토 완료하였으며, 실제 인프라 배포를 진행합니다.'
+        description: "승인: 보안 및 비용 리포트를 검토 완료하였으며, 실제 인프라 배포를 진행합니다."
         required: true
         type: boolean
         default: false
@@ -19,6 +19,7 @@ permissions:
   contents: read
   pull-requests: write
 
+# 다른 terraform 워크플로우와 충돌 방지
 concurrency:
   group: terraform-state
   cancel-in-progress: false
@@ -35,8 +36,6 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
 
       - name: Terraform init
         working-directory: terraform/envs/dev
@@ -45,10 +44,10 @@ jobs:
       - name: Trivy scan
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'config'
-          scan-ref: 'terraform'
-          format: 'table'
-          output: 'trivy-report.txt' 
+          scan-type: "config"
+          scan-ref: "terraform"
+          format: "table"
+          output: "trivy-report.txt"
           hide-progress: false
 
       - name: Show Trivy Output
@@ -76,43 +75,41 @@ jobs:
       - name: Generate Telegram Message
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         run: |
-            cat > telegram-message.md <<EOF
-            [인프라 사전 검증 리포트]
-            
-            [예상 월 비용]
-            EOF
-            
-            grep -E "OVERALL TOTAL|Total Monthly" terraform/envs/dev/infracost-report.txt | head -3 >> telegram-message.md || echo "(비용 정보 없음)" >> telegram-message.md
-            
-            cat >> telegram-message.md <<EOF
-            
-            [보안 스캔 결과]
-            EOF
-            
-            CRITICAL=$(grep -c "CRITICAL:" trivy-report.txt 2>/dev/null || echo 0)
-            HIGH=$(grep -c "HIGH:" trivy-report.txt 2>/dev/null || echo 0)
-            MEDIUM=$(grep -c "MEDIUM:" trivy-report.txt 2>/dev/null || echo 0)
-            
-            echo "- CRITICAL: $CRITICAL" >> telegram-message.md
-            echo "- HIGH: $HIGH" >> telegram-message.md
-            echo "- MEDIUM: $MEDIUM" >> telegram-message.md
-            
-            echo "" >> telegram-message.md
-            echo "상세: GitHub Actions 로그 참조" >> telegram-message.md
-            echo "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> telegram-message.md
-            
-            echo "=== 생성된 메시지 ==="
-            cat telegram-message.md
+          cat > telegram-message.md <<EOF
+          [인프라 사전 검증 리포트]
+
+          [예상 월 비용]
+          EOF
+
+          grep -E "OVERALL TOTAL|Total Monthly" terraform/envs/dev/infracost-report.txt | head -3 >> telegram-message.md || echo "(비용 정보 없음)" >> telegram-message.md
+
+          cat >> telegram-message.md <<EOF
+
+          [보안 스캔 결과]
+          EOF
+
+          CRITICAL=$(grep -c "CRITICAL:" trivy-report.txt 2>/dev/null || echo 0)
+          HIGH=$(grep -c "HIGH:" trivy-report.txt 2>/dev/null || echo 0)
+          MEDIUM=$(grep -c "MEDIUM:" trivy-report.txt 2>/dev/null || echo 0)
+
+          echo "- CRITICAL: $CRITICAL" >> telegram-message.md
+          echo "- HIGH: $HIGH" >> telegram-message.md
+          echo "- MEDIUM: $MEDIUM" >> telegram-message.md
+
+          echo "" >> telegram-message.md
+          echo "상세: GitHub Actions 로그 참조" >> telegram-message.md
+          echo "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> telegram-message.md
+
+          echo "=== 생성된 메시지 ==="
+          cat telegram-message.md
 
       - name: Send Telegram Notification
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-        run: |
-          MESSAGE=$(cat telegram-message.md)
-          
-          curl -s -X POST \
-            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=$MESSAGE"
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message_file: telegram-message.md
 
       - name: Post Plan & Cost to PR comment
         if: github.event_name == 'pull_request'
@@ -122,9 +119,9 @@ jobs:
             const fs = require('fs');
             const plan = fs.readFileSync('terraform/envs/dev/plan-output.txt', 'utf8');
             const cost = fs.readFileSync('terraform/envs/dev/infracost-report.txt', 'utf8');
-            
+
             const output = `## 인프라 변경 사전 검증 리포트\n### Infracost 예상 비용\n\`\`\`text\n${cost}\n\`\`\`\n### Terraform Plan 상세 내역\n<details><summary>Plan 결과 전개</summary>\n\n\`\`\`text\n${plan}\n\`\`\`\n\n</details>`;
-            
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -146,8 +143,6 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
 
       - name: Terraform init
         working-directory: terraform/envs/dev
@@ -159,25 +154,21 @@ jobs:
 
       - name: Send Apply Success Notification
         if: success()
-        run: |
-          MESSAGE="✅ 수동 인프라 배포(Terraform Apply) 작업이 정상적으로 완료되었습니다.
-          실행자: ${{ github.actor }}
-          로그: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          
-          curl -s -X POST \
-            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=$MESSAGE"
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            수동 인프라 배포(Terraform Apply) 작업이 정상적으로 완료되었습니다.
+            실행자: ${{ github.actor }}
 
       - name: Send Apply Failure Notification
         if: failure()
-        run: |
-          MESSAGE="❌ 수동 인프라 배포(Terraform Apply) 실패
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            수동 인프라 배포(Terraform Apply) 실패
           실행자: ${{ github.actor }}
-          GitHub Actions 로그를 확인하십시오.
-          로그: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          
-          curl -s -X POST \
-            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=$MESSAGE"
+            GitHub Actions 로그를 확인하십시오.
