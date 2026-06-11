@@ -17,7 +17,7 @@ module "asg" {
   instance_type = "t3.micro"
 
   # 최소 2대를 유지하고, 최대 4대까지 자동으로 늘어납니다.
-  desired_capacity = var.desired_capacity
+  desired_capacity = 2
   min_size         = 2
   max_size         = 4
 
