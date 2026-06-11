@@ -16,11 +16,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Docker Hub 로그인
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: AWS ECR 로그인
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        # self-hosted runner에 설정된 AWS 자격 증명을 그대로 사용합니다.
 
       - name: Docker Buildx 설정
         uses: docker/setup-buildx-action@v3
@@ -32,5 +31,5 @@ jobs:
           file: docker/Dockerfile.db
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/project02-db:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/project02-db:${{ github.sha }}
+            644724502235.dkr.ecr.ap-northeast-2.amazonaws.com/project02-db-repo:latest
+            644724502235.dkr.ecr.ap-northeast-2.amazonaws.com/project02-db-repo:${{ github.sha }}
