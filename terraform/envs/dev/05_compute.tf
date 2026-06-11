@@ -27,4 +27,22 @@ module "project02_db_ec2" {
   tags               = { Role = "DB" }
 
   root_volume_size = 30
+
+  # 스키마가 bake된 커스텀 postgres 이미지 사용
+  # 이미지 빌드: docker/Dockerfile.db → [DOCKERHUB_USERNAME]/project02-db:latest
+  user_data = <<-EOF
+    #!/bin/bash
+    dnf install -y docker
+    systemctl enable --now docker
+    usermod -aG docker ec2-user
+
+    docker run -d \
+      --name postgres \
+      --restart always \
+      -e POSTGRES_USER=${var.db_user} \
+      -e POSTGRES_PASSWORD=${var.db_password} \
+      -e POSTGRES_DB=eventdb \
+      -p 5432:5432 \
+      [DOCKERHUB_USERNAME]/project02-db:latest
+  EOF
 }

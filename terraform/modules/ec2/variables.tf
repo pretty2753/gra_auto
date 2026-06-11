@@ -34,3 +34,9 @@ variable "iam_instance_profile" {
   type        = string
   default     = null
 }
+
+variable "user_data" {
+  description = "인스턴스 최초 부팅 시 실행할 스크립트"
+  type        = string
+  default     = null
+}
