@@ -68,46 +68,46 @@ jobs:
           infracost breakdown --path plan.json --format table --out-file infracost-report.txt
           cat infracost-report.txt
 
-      - name: Generate Telegram Message
+      - name: Generate Discord Message
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         run: |
-            cat > telegram-message.md <<EOF
-            [인프라 사전 검증 리포트]
+            cat > discord-message.md <<EOF
+            ### 🔍 인프라 사전 검증 리포트
             
-            [예상 월 비용]
+            #### 💵 예상 월 비용
             EOF
             
-            grep -E "OVERALL TOTAL|Total Monthly" infracost-report.txt | head -3 >> telegram-message.md || echo "(비용 정보 없음)" >> telegram-message.md
+            grep -E "OVERALL TOTAL|Total Monthly" infracost-report.txt | head -3 >> discord-message.md || echo "(비용 정보 없음)" >> discord-message.md
             
-            cat >> telegram-message.md <<EOF
+            cat >> discord-message.md <<EOF
             
-            [보안 스캔 결과]
+            #### 🛡️ 보안 스캔 결과
             EOF
             
             CRITICAL=$(grep -c "CRITICAL:" ${{ github.workspace }}/trivy-report.txt 2>/dev/null || echo 0)
             HIGH=$(grep -c "HIGH:" ${{ github.workspace }}/trivy-report.txt 2>/dev/null || echo 0)
             MEDIUM=$(grep -c "MEDIUM:" ${{ github.workspace }}/trivy-report.txt 2>/dev/null || echo 0)
             
-            echo "- CRITICAL: \$CRITICAL" >> telegram-message.md
-            echo "- HIGH: \$HIGH" >> telegram-message.md
-            echo "- MEDIUM: \$MEDIUM" >> telegram-message.md
+            echo "- CRITICAL: $CRITICAL" >> discord-message.md
+            echo "- HIGH: $HIGH" >> discord-message.md
+            echo "- MEDIUM: $MEDIUM" >> discord-message.md
             
-            echo "" >> telegram-message.md
-            echo "상세: GitHub Actions 로그 참조" >> telegram-message.md
-            echo "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> telegram-message.md
+            echo "" >> discord-message.md
+            echo "상세 내용: [GitHub Actions 로그 확인](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> discord-message.md
             
             echo "=== 생성된 메시지 ==="
-            cat telegram-message.md
+            cat discord-message.md
 
-      - name: Send Telegram Notification
+      - name: Send Discord Notification
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
         run: |
-          MESSAGE=$(cat telegram-message.md)
+          MESSAGE=$(cat discord-message.md)
+          jq -n --arg msg "$MESSAGE" '{"content": $msg}' > discord-payload.json
           
-          curl -s -X POST \
-            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=\$MESSAGE"
+          curl -s -H "Content-Type: application/json" \
+            -X POST \
+            -d @discord-payload.json \
+            "${{ secrets.DISCORD_WEBHOOK_URL }}"
 
       - name: Post Plan & Cost to PR comment
         if: github.event_name == 'pull_request'

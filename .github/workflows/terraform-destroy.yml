@@ -24,6 +24,35 @@ jobs:
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
 
+      - name: Send Destroy Success Notification
+        if: success()
+        run: |
+          MESSAGE="✅ **수동 인프라 삭제(Terraform Destroy) 작업이 정상적으로 완료되었습니다.**
+          - **실행자**: ${{ github.actor }}
+          - **로그**: [GitHub Actions 로그 확인](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          
+          jq -n --arg msg "$MESSAGE" '{"content": $msg}' > discord-payload.json
+          
+          curl -s -H "Content-Type: application/json" \
+            -X POST \
+            -d @discord-payload.json \
+            "${{ secrets.DISCORD_WEBHOOK_URL }}"
+
+      - name: Send Destroy Failure Notification
+        if: failure()
+        run: |
+          MESSAGE="❌ **수동 인프라 삭제(Terraform Destroy) 실패**
+          - **실행자**: ${{ github.actor }}
+          - GitHub Actions 로그를 확인하십시오.
+          - **로그**: [GitHub Actions 로그 확인](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          
+          jq -n --arg msg "$MESSAGE" '{"content": $msg}' > discord-payload.json
+          
+          curl -s -H "Content-Type: application/json" \
+            -X POST \
+            -d @discord-payload.json \
+            "${{ secrets.DISCORD_WEBHOOK_URL }}"
+
       - name: Cleanup Terraform Cache
         if: always()
         run: rm -rf .terraform .terraform.lock.hcl tfplan
