@@ -20,3 +20,9 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "desired_capacity" {
+  description = "ASG의 원하는 인스턴스 개수"
+  type        = number
+  default     = 2
+}
