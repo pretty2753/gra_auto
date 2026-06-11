@@ -5,7 +5,7 @@
 
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
-from datetime import datetime
+from datetime import datetime, timedelta
 from google import genai
 from collections import deque
 from psycopg2 import pool as pg_pool
@@ -55,6 +55,31 @@ DB_CONFIG = {
 db_connection_pool = None
 
 # =============================================
+# Circuit Breaker 설정
+# Gemini API 오류 반복 시 자동 차단
+#
+# 3가지 상태
+#   CLOSED    : 정상, Gemini 호출 가능
+#   OPEN      : 차단 중, 즉시 실패 반환
+#   HALF_OPEN : 테스트 중, 1번만 호출 허용
+#
+# 동작 방식
+#   429 에러 3번 발생 → OPEN (1시간 차단)
+#   1시간 후 → HALF_OPEN (테스트 1번)
+#   성공 → CLOSED 복귀 / 실패 → 다시 OPEN
+# =============================================
+CIRCUIT_CLOSED    = "CLOSED"
+CIRCUIT_OPEN      = "OPEN"
+CIRCUIT_HALF_OPEN = "HALF_OPEN"
+
+circuit_state       = CIRCUIT_CLOSED  # 현재 상태
+circuit_error_count = 0               # 연속 에러 횟수
+circuit_open_until  = None            # 차단 해제 시각
+
+CIRCUIT_ERROR_THRESHOLD = 3                   # 에러 몇 번에 차단할지
+CIRCUIT_OPEN_DURATION   = timedelta(hours=1)  # 차단 지속 시간
+
+# =============================================
 # DB 초기화 함수
 # 서버 시작 시 테이블 자동 생성
 # CREATE TABLE IF NOT EXISTS → 이미 있으면 그냥 넘어감
@@ -62,6 +87,7 @@ db_connection_pool = None
 # =============================================
 def init_db():
     global db_connection_pool
+    conn = None
     try:
         db_connection_pool = pg_pool.SimpleConnectionPool(
             minconn=1,
@@ -85,8 +111,7 @@ def init_db():
                 )
             """)
         conn.commit()
-        db_connection_pool.putconn(conn)
-        print("✅ DB 테이블 확인 완료")
+        print(" DB 테이블 확인 완료")
         return True
 
     except Exception as e:
@@ -94,6 +119,9 @@ def init_db():
         print(" DB 없이 서버 계속 실행합니다.")
         db_connection_pool = None
         return False
+    finally:           
+        if conn and db_connection_pool:
+            db_connection_pool.putconn(conn)
 
 # =============================================
 # DB 재연결 백그라운드 태스크
@@ -106,7 +134,7 @@ async def retry_db_connection():
         await asyncio.sleep(30)
         success = await run_in_threadpool(init_db)
         if success:
-            print("✅ DB 재연결 성공!")
+            print(" DB 재연결 성공!")
             break
 
 # =============================================
@@ -129,7 +157,7 @@ async def startup_event():
 # =============================================
 def get_logs():
     try:
-        with open(LOG_FILE, "r") as f:
+        with open(LOG_FILE, "r", encoding="utf-8", errors="ignore") as f:
             last_100 = deque(f, maxlen=100)
             return "".join(last_100)
     except FileNotFoundError:
@@ -178,8 +206,33 @@ def mask_pii(text: str) -> str:
 
 # =============================================
 # 3. Gemini 분석 함수
+# Circuit Breaker 포함
 # =============================================
 async def analyze_with_gemini(masked_log: str, alerts_summary: str) -> dict:
+    global circuit_state, circuit_error_count, circuit_open_until
+
+    # =============================================
+    # Circuit Breaker 상태 확인
+    # OPEN 상태면 Gemini 호출하지 않고 즉시 반환
+    # =============================================
+    now = datetime.now()
+
+    if circuit_state == CIRCUIT_OPEN:
+        if now < circuit_open_until:
+            remaining = int((circuit_open_until - now).total_seconds() / 60)
+            print(f"   Circuit Breaker OPEN - {remaining}분 후 재시도 가능")
+            return {
+                "cause": f"AI 분석 일시 중단 (API 한도 초과 - {remaining}분 후 재시도)",
+                "severity": "알 수 없음",
+                "recommendation": "알 수 없음",
+                "runbook": "알 수 없음",
+                "actions": ["수동으로 로그 확인 필요", "잠시 후 자동 재시도 예정"],
+                "recommendation_reason": "Circuit Breaker 작동 중"
+            }
+        else:
+            # 차단 시간 지남 → HALF_OPEN (테스트 1번 허용)
+            circuit_state = CIRCUIT_HALF_OPEN
+            print("   Circuit Breaker HALF-OPEN - 테스트 호출 시도")
 
     # TODO [4] : 실제 프로젝트 적용 시
     # 팀에서 확정된 런북 파일명으로 변경
@@ -222,15 +275,19 @@ C = 공격적 (최대치 즉시 확장)
 
     max_retry    = 5
     wait_seconds = 15
-
     for attempt in range(max_retry):
         try:
             print(f"   Gemini 요청 중... (시도 {attempt + 1}/{max_retry})")
+            
 
             response = client.models.generate_content(
                 model=GEMINI_MODEL,
                 contents=prompt
             )
+
+            # 성공 시 Circuit Breaker 초기화
+            circuit_error_count = 0
+            circuit_state       = CIRCUIT_CLOSED
 
             raw = response.text.strip()
             raw = raw.replace("```json", "").replace("```", "").strip()
@@ -248,7 +305,37 @@ C = 공격적 (최대치 즉시 확장)
                 }
 
         except Exception as e:
-            print(f"   ⚠️ Gemini 오류: {e}")
+            print(f"   Gemini 오류: {e}")
+            error_str = str(e)
+
+            # 429 에러만 Circuit Breaker 카운트
+            # 503 에러는 재시도만 (카운트 안 함)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                circuit_error_count += 1
+                print(f"   Circuit Breaker 에러 카운트: {circuit_error_count}/{CIRCUIT_ERROR_THRESHOLD}")
+
+                if circuit_error_count >= CIRCUIT_ERROR_THRESHOLD:
+                    circuit_state      = CIRCUIT_OPEN
+                    circuit_open_until = datetime.now() + CIRCUIT_OPEN_DURATION
+                    print("   Circuit Breaker OPEN - 1시간 차단 시작")
+                    return {
+                        "cause": "API 한도 초과로 AI 분석 중단",
+                        "severity": "알 수 없음",
+                        "recommendation": "알 수 없음",
+                        "runbook": "알 수 없음",
+                        "actions": ["수동으로 로그 확인 필요"],
+                        "recommendation_reason": "Circuit Breaker 작동"
+                    }
+                    
+                return {
+                    "cause": "API 한도 초과",
+                    "severity": "알 수 없음",
+                    "recommendation": "알 수 없음",
+                    "runbook": "알 수 없음",
+                    "actions": ["잠시 후 재시도 예정"],
+                    "recommendation_reason": f"429 에러 ({circuit_error_count}/{CIRCUIT_ERROR_THRESHOLD})"
+                }
+
             if attempt < max_retry - 1:
                 print(f"   {wait_seconds}초 후 재시도...")
                 await asyncio.sleep(wait_seconds)
@@ -281,9 +368,9 @@ def send_discord(result: dict, alert_names: str, instances: str):
     )
 
     payload = {
-        "username": "AIOps 분석 봇 🤖",
+        "username": "AIOps 분석 봇",
         "embeds": [{
-            "title": f"⚠️ 장애 감지 — {alert_names}",
+            "title": f"장애 감지 - {alert_names}",
             "color": color,
             "fields": [
                 {"name": "서버",      "value": instances,                               "inline": True},
@@ -295,15 +382,15 @@ def send_discord(result: dict, alert_names: str, instances: str):
                 {"name": "즉시 조치", "value": actions_text,                            "inline": False},
                 {"name": "추천 런북", "value": result.get("runbook", ""),               "inline": False},
             ],
-            "footer": {"text": "Privacy AIOps · 로그는 마스킹 처리 후 AI 분석됨"}
+            "footer": {"text": "Privacy AIOps - 로그는 마스킹 처리 후 AI 분석됨"}
         }]
     }
 
-    res = requests.post(DISCORD_WEBHOOK_URL, json=payload)
+    res = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=5)   
     if res.status_code == 204:
-        print("✅ Discord 전송 성공")
+        print(" Discord 전송 성공")
     else:
-        print(f"❌ Discord 전송 실패: {res.status_code}")
+        print(f" Discord 전송 실패: {res.status_code}")
 
 # =============================================
 # 5. DB 저장 함수
@@ -312,7 +399,7 @@ def send_discord(result: dict, alert_names: str, instances: str):
 # =============================================
 def save_to_db(result: dict, alert_name: str, instance: str):
     if db_connection_pool is None:
-        print("⚠️ DB 연결 풀 없음 - 저장 건너뜀")
+        print(" DB 연결 풀 없음 - 저장 건너뜀")
         return
 
     conn = None
@@ -334,9 +421,9 @@ def save_to_db(result: dict, alert_name: str, instance: str):
                 result.get("runbook", "")
             ))
         conn.commit()
-        print("✅ DB 저장 완료")
+        print(" DB 저장 완료")
     except Exception as e:
-        print(f"❌ DB 저장 실패: {e}")
+        print(f" DB 저장 실패: {e}")
     finally:
         if conn:
             db_connection_pool.putconn(conn)
@@ -363,12 +450,13 @@ async def receive_alert(request: Request):
     if not alerts:
         return {"status": "no alerts", "count": 0}
 
-    alert_names    = ", ".join([a["labels"].get("alertname", "unknown") for a in alerts])
-    instances      = ", ".join([a["labels"].get("instance",   "unknown") for a in alerts])
+    alert_names = ", ".join([a["labels"].get("alertname", "unknown") for a in alerts])
+    instances   = ", ".join([a["labels"].get("instance",   "unknown") for a in alerts])
     alerts_summary = "\n".join([
-        f"- {a['labels'].get('alertname')} | {a['labels'].get('instance')} | {a['annotations'].get('summary', '')}"
+        f"- {a.get('labels', {}).get('alertname')} | {a.get('labels', {}).get('instance')} | {a.get('annotations', {}).get('summary', '')}"
         for a in alerts
-    ])
+        ])
+        
 
     # =============================================
     # 우선순위 결정
@@ -377,7 +465,7 @@ async def receive_alert(request: Request):
     # warning  → Discord + DB
     # 기타     → DB만
     # =============================================
-    severities = [a["labels"].get("severity", "unknown").lower() for a in alerts]
+    sseverities  = [a.get("labels", {}).get("severity", "unknown").lower() for a in alerts]
 
     if "critical" in severities:
         priority = "critical"
@@ -453,3 +541,8 @@ async def receive_alert(request: Request):
     print("="*50)
 
     return {"status": "received", "count": len(alerts), "priority": priority}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
