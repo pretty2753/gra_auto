@@ -57,10 +57,9 @@ build {
   # Docker + docker-compose-plugin 설치
   provisioner "shell" {
     inline = [
-      "sudo dnf install -y docker",
+      "sudo dnf install -y docker docker-compose-plugin",
       "sudo systemctl enable --now docker",
       "sudo usermod -aG docker ec2-user",
-      "sudo dnf install -y docker-compose-plugin",
       "echo 'Docker 설치 완료'"
     ]
   }
