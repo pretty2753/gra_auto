@@ -45,11 +45,11 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 # VM2 실제 IP, DB 이름, 계정 정보로 변경
 # =============================================
 DB_CONFIG = {
-    "host":     "172.16.8.230",  # TODO: VM2 실제 IP로 변경
-    "port":     "5432",
-    "dbname":   "logsdb",        # TODO: 팀 DB 이름으로 변경
-    "user":     "loguser",       # TODO: 실제 DB 계정으로 변경
-    "password": "password"       # TODO: 실제 DB 비밀번호로 변경
+    "host":     os.getenv("DB_HOST"),
+    "port":     os.getenv("DB_PORT"),
+    "dbname":   os.getenv("DB_NAME"),
+    "user":     os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD")
 }
 
 db_connection_pool = None
@@ -385,12 +385,14 @@ def send_discord(result: dict, alert_names: str, instances: str):
             "footer": {"text": "Privacy AIOps - 로그는 마스킹 처리 후 AI 분석됨"}
         }]
     }
-
-    res = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=5)   
-    if res.status_code == 204:
-        print(" Discord 전송 성공")
-    else:
-        print(f" Discord 전송 실패: {res.status_code}")
+    try:
+        res = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=5)
+        if res.status_code == 204:
+            print(" Discord 전송 성공")
+        else:
+            print(f" Discord 전송 실패: {res.status_code}")
+    except requests.RequestException as e:
+        print(f" Discord 전송 실패 (무시하고 계속): {e}")
 
 # =============================================
 # 5. DB 저장 함수
@@ -423,6 +425,8 @@ def save_to_db(result: dict, alert_name: str, instance: str):
         conn.commit()
         print(" DB 저장 완료")
     except Exception as e:
+        if conn:
+            conn.rollback()
         print(f" DB 저장 실패: {e}")
     finally:
         if conn:
@@ -465,8 +469,8 @@ async def receive_alert(request: Request):
     # warning  → Discord + DB
     # 기타     → DB만
     # =============================================
-    sseverities  = [a.get("labels", {}).get("severity", "unknown").lower() for a in alerts]
-
+    severities = [a.get("labels", {}).get("severity", "unknown").lower() for a in alerts]
+    
     if "critical" in severities:
         priority = "critical"
     elif "warning" in severities:
