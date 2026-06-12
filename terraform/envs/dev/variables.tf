@@ -20,3 +20,9 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "desired_capacity" {
+  description = "원하는 ec2 대수"
+  type        =  number
+  default     = 2
+}
