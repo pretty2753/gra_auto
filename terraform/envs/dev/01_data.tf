@@ -6,3 +6,14 @@
 data "aws_availability_zones" "available" {
   state = "available"
 }
+
+# 생성된 최신 WAS AMI 정보 조회 (EBS 기반 이미지 동적 연동)
+data "aws_ami" "project02_was" {
+  most_recent = true
+  owners      = ["self"]
+
+  filter {
+    name   = "name"
+    values = ["project02-was-*"]
+  }
+}

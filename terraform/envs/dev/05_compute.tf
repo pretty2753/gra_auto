@@ -18,24 +18,28 @@ module "project02_db_ec2_key" {
 # [3] DB (데이터베이스 서버)
 # → PostgreSQL 등 데이터베이스를 구동할 단일 서버입니다. (데이터 정합성을 위해 1대만 운영)
 module "project02_db_ec2" {
-  source             = "../../modules/ec2"
-  instance_type      = "t3.micro"
-  subnet_id          = module.project02_private_subnet_db.subnet_id
-  security_group_ids = [module.project02_db_sg.sg_id]
-  key_name           = module.project02_db_ec2_key.key_name
-  name               = "project02_db_ec2"
-  tags               = { Role = "DB" }
+  source               = "../../modules/ec2"
+  instance_type        = "t3.micro"
+  subnet_id            = module.project02_private_subnet_db.subnet_id
+  security_group_ids   = [module.project02_db_sg.sg_id]
+  key_name             = module.project02_db_ec2_key.key_name
+  iam_instance_profile = aws_iam_instance_profile.ec2_discovery_profile.name
+  name                 = "project02_db_ec2"
+  tags                 = { Role = "DB" }
 
   root_volume_size = 30
 
-  # 스키마가 bake된 커스텀 postgres 이미지 사용
-  # 이미지 빌드: docker/Dockerfile.db → [DOCKERHUB_USERNAME]/project02-db:latest
+  # 스키마가 bake된 커스텀 postgres 이미지 사용 (AWS ECR에서 가져옴)
   user_data = <<-EOF
     #!/bin/bash
     dnf install -y docker
     systemctl enable --now docker
     usermod -aG docker ec2-user
 
+    # AWS ECR 로그인
+    aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 644724502235.dkr.ecr.ap-northeast-2.amazonaws.com
+
+    # ECR에서 이미지 실행
     docker run -d \
       --name postgres \
       --restart always \
@@ -43,6 +47,6 @@ module "project02_db_ec2" {
       -e POSTGRES_PASSWORD=${var.db_password} \
       -e POSTGRES_DB=eventdb \
       -p 5432:5432 \
-      [DOCKERHUB_USERNAME]/project02-db:latest
+      644724502235.dkr.ecr.ap-northeast-2.amazonaws.com/project02-db-repo:latest
   EOF
 }

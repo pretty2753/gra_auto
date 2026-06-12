@@ -57,10 +57,13 @@ build {
   # Docker + docker-compose-plugin 설치
   provisioner "shell" {
     inline = [
-      "sudo dnf install -y docker docker-compose-plugin",
+      "sudo dnf install -y docker",
       "sudo systemctl enable --now docker",
       "sudo usermod -aG docker ec2-user",
-      "echo 'Docker 설치 완료'"
+      "sudo mkdir -p /usr/libexec/docker/cli-plugins/",
+      "sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m) -o /usr/libexec/docker/cli-plugins/docker-compose",
+      "sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose",
+      "echo 'Docker 및 Docker Compose 설치 완료'"
     ]
   }
 
