@@ -1,11 +1,11 @@
 name: "DB Image Build & Push"
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - "docker/eventdb.sql"
-      - "docker/Dockerfile.db"
+#  push:
+#    branches: ["main"]
+#    paths:
+#      - "docker/eventdb.sql"
+#      - "docker/Dockerfile.db"
   workflow_dispatch:
 
 jobs:
