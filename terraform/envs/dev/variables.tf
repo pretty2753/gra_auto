@@ -24,5 +24,5 @@ variable "db_password" {
 variable "desired_capacity" {
   description = "원하는 ec2 대수"
   type        =  number
-  default     = 2
+  default     = 1
 }
