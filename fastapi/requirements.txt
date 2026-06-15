@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+httpx
+pydantic
+apscheduler
+ntplib
+pytz
+boto3
