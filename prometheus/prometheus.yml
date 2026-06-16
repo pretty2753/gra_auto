@@ -49,3 +49,7 @@ scrape_configs:
       - source_labels: [__meta_ec2_private_ip]
         target_label: __address__
         replacement: "${1}:9100"
+      
+      # EC2의 네임 태그 확인
+      - source_labels: [__meta_ec2_tag_Name]
+        target_label: instance_name

@@ -106,3 +106,102 @@ groups:
         for: 5m
         labels:
           action: scale_in
+  # ============================================================
+  # 1. EC2 인스턴스 다운 감지
+  #    - node_exporter가 일정 시간 응답 없으면 down 처리
+  #    - Auto Scaling Group 재기동 / 인스턴스 교체 트리거용
+  # ============================================================
+  - name: ec2_instance_down
+    interval: 30s
+    rules:
+
+      - alert: Instance-down
+        expr: up{job="node_exporter"} == 0
+        for: 2m
+        labels:
+          action: Aiops_instance_down
+
+
+      - alert: Instance-unreachable
+        expr: absent(up{job="node_exporter"}) == 1
+        for: 2m
+        labels:
+          action: Aiops_instance_unreachable
+  # ============================================================
+  # 2. 배포 후 에러율 급증 → 이전 버전으로 롤백
+  #    - HTTP 5xx 비율이 임계치 초과 시 롤백 트리거
+  #    - FastAPI / nginx exporter 메트릭 기반
+  # ============================================================
+  - name: Deploy-rollback
+    interval: 30s
+    rules:
+      - record: http_error_ratio
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[2m]))
+          /
+          sum(rate(http_requests_total[2m]))
+
+      - alert: Aiops_HighErrorRateAfterDeploy
+        expr: http_error_ratio > 0.1
+        for: 2m
+        labels:
+          action: Aiops_rollback
+
+      - alert: CriticalErrorRateAfterDeploy
+        expr: http_error_ratio > 0.3
+        for: 1m
+        labels:
+          action: Aiops_rollback
+  # ============================================================
+  # 3. DB 연결 실패 / DB 오류 → DB 재시작
+  #  postgres_exporter
+  # ============================================================
+  - name: db_connection_alerts
+    interval: 30s
+    rules:
+      # DB exporter 자체가 죽은 경우 (DB down 추정)
+      - alert: DB-down
+        expr: up{job=~"mysql_exporter|postgres_exporter"} == 0
+        for: 1m
+        labels:
+          action: Aiops_db_connect_failure
+
+      # 앱에서 DB 커넥션 실패가 지속적으로 발생
+      - alert: Db-non-connect
+        expr: rate(db_connection_errors_total[2m]) > 5
+        for: 2m
+        labels:
+          action: Aiops_db_connect_failure
+    # ============================================================
+  # 4. CPU / Memory 스파이크 (순간 급등)
+  #    - 기존 Level1/2는 "지속" 기반
+  #    - 여기서는 단시간 급등(스파이크) 별도 감지
+  # ============================================================
+  - name: resource_spike_alerts
+    interval: 15s
+    rules:
+  # 30초 사이에 특정 EC2 한 대라도 CPU / 메모리 90% 초과
+      - alert: Cpu-spike
+        expr: instance:cpu_usage > 90
+        for: 30s
+        labels:
+          action: Aiops_cpu_spike
+
+      - alert: Memory-spike
+        expr: instance:memory_usage > 90
+        for: 30s
+        labels:
+          action: Aiops_memory_spike
+
+    # 30초 사이 특정 인스턴스에서 40%p 이상 급등
+      - alert: Cpu-rush
+        expr: (instance:cpu_usage - instance:cpu_usage offset 1m) > 40
+        for: 30s
+        labels:
+          action: Aiops_cpu_rush
+
+      - alert: Memory-rush
+        expr: (instance:memory_usage - instance:memory_usage offset 1m) > 40
+        for: 30s
+        labels:
+          action: Aiops_memory_rush

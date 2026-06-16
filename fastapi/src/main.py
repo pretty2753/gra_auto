@@ -344,8 +344,8 @@ async def webhook_scale_in(request: Request):
 # ===============
 # aiops 부분
 # ===============
-# @app.post("/webhook/troubleshoot")
-# 여기서 json으로 온 부분 받기
+@app.post("/aiops/webhook")
+
 
 
 # ============================

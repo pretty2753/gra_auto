@@ -40,11 +40,14 @@ route:
         action: scale_out
       receiver: scale-out-webhook
 
-# aiops 부분 routes 추후에 적어야함
+    - match_re:
+        action= "Aiops_.*"
+      receiver: aiops-webhook
 
-============================================
-Receiver 정의 - 알람을 받는 대상
-============================================
+
+#============================================
+# Receiver 정의 - 알람을 받는 대상
+#============================================
 receivers:
   # =========================
   # aiops api 활용을 위한 부분
@@ -76,6 +79,12 @@ receivers:
     webhook_configs:
       - url: 'http://fastapi:8001/webhook/scale-in'
         send_resolved: true
+
+  - name: 'aiops-webhook'
+    webhook_configs:
+      - url: 'http://fastapi:8001/aiops/webhook'
+        send_resolved: true
+    
 
 
 
