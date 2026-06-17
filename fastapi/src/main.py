@@ -168,8 +168,9 @@ async def list_jobs():
         ]
     }
 
-
+# ==========================================================
 # grafana에서의 즉시 scale in / scale out + ec2 대수 확인까지 
+# ==========================================================
 @app.post("/api/scale-out")
 async def scale_out(req: ScaleRequest):
     if req.delta < 1:
@@ -244,7 +245,7 @@ async def reserve_scale(req: ReserveScaleRequest):
         'date',
         run_date=run_time,
         args=["scheduled-scale", {
-            "capacity": req.capacity,
+            "require_ec2": req.capacity,
             "duration": req.duration,
             "user": "grafana"
         }],
@@ -271,7 +272,7 @@ async def cancel_reserve_scale(schedule_id: str):
 # 긴급 롤백
 @app.post("/api/rollback")
 async def rollback(req: RollbackRequest):
-    await trigger_github_action("rollback", {"user": req.user})
+    await trigger_github_action("rollback", {"user": "grafana"})
     return {"status": "success", "message": "Rollback triggered"}
 
 # grafana 대시보드에서 새로고침, 창 닫기 해도 다시 예약된 목록을 불러오기
@@ -321,7 +322,7 @@ async def webhook_scale_out(request: Request):
     # GitHub Actions 호출
     await trigger_github_action("scale-out", {
         "require_ec2": replicas,
-        "sender": alertmanager
+        "sender": "alertmanager"
     })
 
     return {"status": "triggered", "replicas": replicas}
@@ -339,7 +340,7 @@ async def webhook_scale_in(request: Request):
     # scale-in은 항상 1대 감소
     await trigger_github_action("scale-in", {
         "require_ec2": 1,
-        "sender": alertmanager
+        "sender": "alertmanager"
     })
 
     return {"status": "triggered", "replicas": 1}
