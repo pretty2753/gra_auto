@@ -6,17 +6,19 @@ import pytz
 import boto3
 from datetime import datetime
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-KST = `pytz`.timezone('Asia/Seoul')
+KST = pytz.timezone('Asia/Seoul')
 # =========================================
-# 깃허브 환경변수 불러오기
+# 깃허브 / AWS 환경변수 불러오기 
 # =========================================
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO = os.getenv("GITHUB_REPO")
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY") 
 
 
 # ====================================================================
@@ -184,7 +186,7 @@ async def scale_out(req: ScaleRequest):
             f"최대 {EC2_MAX_COUNT}대 초과 (가능: +{available}대까지)"
         )
 
-    await trigger_github_action("scale-out", {"require_ec2": req.delta, "sender": grafana})
+    await trigger_github_action("scale-out", {"require_ec2": req.delta, "sender": "grafana"})
 
     return {
         "status": "success",
@@ -209,7 +211,7 @@ async def scale_in(req: ScaleRequest):
             f"최소 {EC2_MIN_COUNT}대 미만 (가능: -{available}대까지)"
         )
 
-    await trigger_github_action("scale-in", {"require_ec2": req.delta, "sender": grafana})
+    await trigger_github_action("scale-in", {"require_ec2": req.delta, "sender": "grafana"})
 
     return {
         "status": "success",
@@ -244,7 +246,7 @@ async def reserve_scale(req: ReserveScaleRequest):
         args=["scheduled-scale", {
             "capacity": req.capacity,
             "duration": req.duration,
-            "user": grafana
+            "user": "grafana"
         }],
         id=req.schedule_id,
         replace_existing=True,
@@ -336,7 +338,7 @@ async def webhook_scale_in(request: Request):
 
     # scale-in은 항상 1대 감소
     await trigger_github_action("scale-in", {
-        "require_ec2": 1
+        "require_ec2": 1,
         "sender": alertmanager
     })
 
